@@ -17,6 +17,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state/stategen"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 type Option func(s *Service) error
@@ -136,6 +137,9 @@ func WithStateNotifier(n statefeed.Notifier) Option {
 // WithForkChoiceStore to update an optimized fork-choice representation.
 func WithForkChoiceStore(f forkchoice.ForkChoicer) Option {
 	return func(s *Service) error {
+		assert.Always(f != nil, "ForkChoiceStore must not be nil", map[string]any{
+			"ForkChoiceStore": f,
+		})
 		s.cfg.ForkChoiceStore = f
 		return nil
 	}
@@ -168,6 +172,9 @@ func WithSlasherAttestationsFeed(f *event.Feed) Option {
 // WithFinalizedStateAtStartUp to store finalized state at start up.
 func WithFinalizedStateAtStartUp(st state.BeaconState) Option {
 	return func(s *Service) error {
+		assert.Always(st != nil, "FinalizedStateAtStartUp must not be nil", map[string]any{
+			"FinalizedStateAtStartUp": st,
+		})
 		s.cfg.FinalizedStateAtStartUp = st
 		return nil
 	}
@@ -177,6 +184,9 @@ func WithFinalizedStateAtStartUp(st state.BeaconState) Option {
 // the genesis timestamp is known (ClockWaiter) or which determine the genesis timestamp (ClockSetter).
 func WithClockSynchronizer(gs *startup.ClockSynchronizer) Option {
 	return func(s *Service) error {
+		assert.Always(gs != nil, "ClockSynchronizer must not be nil", map[string]any{
+			"ClockSynchronizer": gs,
+		})
 		s.clockSetter = gs
 		s.clockWaiter = gs
 		return nil
@@ -201,6 +211,9 @@ func WithBlobStorage(b *filesystem.BlobStorage) Option {
 
 func WithSyncChecker(checker Checker) Option {
 	return func(s *Service) error {
+		assert.Always(checker != nil, "SyncChecker must not be nil", map[string]any{
+			"SyncChecker": checker,
+		})
 		s.cfg.SyncChecker = checker
 		return nil
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // UpdateAndSaveHeadWithBalances updates the beacon state head after getting justified balanced from cache.
@@ -100,6 +101,10 @@ func (s *Service) saveHead(ctx context.Context, newHeadRoot [32]byte, headBlock 
 	if err != nil {
 		log.WithError(err).Error("could not check if node is optimistically synced")
 	}
+	assert.Always(err == nil, "IsOptimistic should not return error in saveHead", map[string]interface{}{
+		"newHeadRoot": fmt.Sprintf("%#x", newHeadRoot),
+		"error":       err.Error(),
+	})
 	if headBlock.Block().ParentRoot() != oldHeadRoot {
 		// A chain re-org occurred, so we fire an event notifying the rest of the services.
 		commonRoot, forkSlot, err := s.cfg.ForkChoiceStore.CommonAncestor(ctx, oldHeadRoot, newHeadRoot)
@@ -107,6 +112,11 @@ func (s *Service) saveHead(ctx context.Context, newHeadRoot [32]byte, headBlock 
 			log.WithError(err).Error("Could not find common ancestor root")
 			commonRoot = params.BeaconConfig().ZeroHash
 		}
+		assert.Always(err == nil, "Could not find common ancestor root in saveHead", map[string]interface{}{
+			"oldHeadRoot": fmt.Sprintf("%#x", oldHeadRoot),
+			"newHeadRoot": fmt.Sprintf("%#x", newHeadRoot),
+			"error":       err.Error(),
+		})
 		dis := headSlot + newHeadSlot - 2*forkSlot
 		dep := math.Max(uint64(headSlot-forkSlot), uint64(newHeadSlot-forkSlot))
 		oldWeight, err := s.cfg.ForkChoiceStore.Weight(oldHeadRoot)
@@ -162,7 +172,10 @@ func (s *Service) saveHead(ctx context.Context, newHeadRoot [32]byte, headBlock 
 	if err := s.setHead(newHead); err != nil {
 		return errors.Wrap(err, "could not set head")
 	}
-
+	assert.Always(bytes.Equal(s.headRoot()[:], newHeadRoot[:]), "Head root should be updated to new head root after setHead in saveHead", map[string]interface{}{
+		"expectedHeadRoot": fmt.Sprintf("%#x", newHeadRoot),
+		"actualHeadRoot":   fmt.Sprintf("%#x", s.headRoot()),
+	})
 	// Save the new head root to DB.
 	if err := s.cfg.BeaconDB.SaveHeadBlockRoot(ctx, newHeadRoot); err != nil {
 		return errors.Wrap(err, "could not save head root in DB")
@@ -221,6 +234,10 @@ func (s *Service) setHead(newHead *head) error {
 		optimistic: newHead.optimistic,
 		slot:       newHead.slot,
 	}
+	assert.Always(bytes.Equal(s.head.root[:], newHead.root[:]), "Head root should be equal to newHead.root after setHead", map[string]interface{}{
+		"expectedHeadRoot": fmt.Sprintf("%#x", newHead.root),
+		"actualHeadRoot":   fmt.Sprintf("%#x", s.head.root),
+	})
 	return nil
 }
 
@@ -242,6 +259,10 @@ func (s *Service) setHeadInitialSync(root [32]byte, block interfaces.ReadOnlySig
 		state:      state,
 		optimistic: optimistic,
 	}
+	assert.Always(bytes.Equal(s.head.root[:], root[:]), "Head root should be equal to root after setHeadInitialSync", map[string]interface{}{
+		"expectedHeadRoot": fmt.Sprintf("%#x", root),
+		"actualHeadRoot":   fmt.Sprintf("%#x", s.head.root),
+	})
 	return nil
 }
 

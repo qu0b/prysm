@@ -27,6 +27,8 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 	"go.opencensus.io/trace"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // This defines how many epochs since finality the run time will begin to save hot state on to the DB.
@@ -150,6 +152,13 @@ func (s *Service) ReceiveBlock(ctx context.Context, block interfaces.ReadOnlySig
 		tracing.AnnotateError(span, err)
 		return err
 	}
+
+	// Assert that the block is now in forkchoice
+	assert.Always(s.InForkchoice(blockRoot), "Block should now be in forkchoice after postBlockProcess", map[string]any{
+		"blockRoot": fmt.Sprintf("%#x", blockRoot),
+		"slot":      blockCopy.Block().Slot(),
+	})
+
 	if coreTime.CurrentEpoch(postState) > currentEpoch && s.cfg.ForkChoiceStore.IsCanonical(blockRoot) {
 		headSt, err := s.HeadState(ctx)
 		if err != nil {
@@ -167,9 +176,13 @@ func (s *Service) ReceiveBlock(ctx context.Context, block interfaces.ReadOnlySig
 	if err != nil {
 		return errors.Wrap(err, "could not update finalized checkpoint")
 	}
-	// Send finalized events and finalized deposits in the background
+	// If finalization has updated, assert that the finalized epoch has increased
 	if newFinalized {
 		finalized := s.cfg.ForkChoiceStore.FinalizedCheckpoint()
+		assert.Always(finalized.Epoch > currStoreFinalizedEpoch, "Finalized epoch should increase after new finalization", map[string]any{
+			"newFinalizedEpoch": finalized.Epoch,
+			"previousEpoch":     currStoreFinalizedEpoch,
+		})
 		go s.sendNewFinalizedEvent(blockCopy, postState)
 		depCtx, cancel := context.WithTimeout(context.Background(), depositDeadline)
 		go func() {
@@ -407,6 +420,14 @@ func (s *Service) validateStateTransition(ctx context.Context, preState state.Be
 		return nil, invalidBlock{error: err}
 	}
 	stateTransitionProcessingTime.Observe(float64(time.Since(stateTransitionStartTime).Milliseconds()))
+
+	// Assert that the postState is at the expected slot
+	expectedSlot := b.Slot()
+	assert.Always(postState.Slot() == expectedSlot, "Post-state slot matches block slot after state transition", map[string]any{
+		"postStateSlot": postState.Slot(),
+		"blockSlot":     expectedSlot,
+	})
+
 	return postState, nil
 }
 
@@ -416,6 +437,13 @@ func (s *Service) updateJustificationOnBlock(ctx context.Context, preState, post
 	justified := s.cfg.ForkChoiceStore.JustifiedCheckpoint()
 	preStateJustifiedEpoch := preState.CurrentJustifiedCheckpoint().Epoch
 	postStateJustifiedEpoch := postState.CurrentJustifiedCheckpoint().Epoch
+
+	// Assert that the justified checkpoint in postState is consistent with the fork choice store
+	assert.Always(justified.Epoch == postStateJustifiedEpoch, "Justified epoch in fork choice matches postState", map[string]any{
+		"justifiedEpoch":         justified.Epoch,
+		"postStateJustifiedEpoch": postStateJustifiedEpoch,
+	})
+
 	if justified.Epoch > preJustifiedEpoch || (justified.Epoch == postStateJustifiedEpoch && justified.Epoch > preStateJustifiedEpoch) {
 		if err := s.cfg.BeaconDB.SaveJustifiedCheckpoint(ctx, &ethpb.Checkpoint{
 			Epoch: justified.Epoch, Root: justified.Root[:],
@@ -432,6 +460,13 @@ func (s *Service) updateFinalizationOnBlock(ctx context.Context, preState, postS
 	preStateFinalizedEpoch := preState.FinalizedCheckpoint().Epoch
 	postStateFinalizedEpoch := postState.FinalizedCheckpoint().Epoch
 	finalized := s.cfg.ForkChoiceStore.FinalizedCheckpoint()
+
+	// Assert that the finalized checkpoint in postState is consistent with the fork choice store
+	assert.Always(finalized.Epoch == postStateFinalizedEpoch, "Finalized epoch in fork choice matches postState", map[string]any{
+		"finalizedEpoch":         finalized.Epoch,
+		"postStateFinalizedEpoch": postStateFinalizedEpoch,
+	})
+
 	if finalized.Epoch > preFinalizedEpoch || (finalized.Epoch == postStateFinalizedEpoch && finalized.Epoch > preStateFinalizedEpoch) {
 		if err := s.updateFinalized(ctx, &ethpb.Checkpoint{Epoch: finalized.Epoch, Root: finalized.Root[:]}); err != nil {
 			return true, err
@@ -495,5 +530,12 @@ func (s *Service) validateExecutionOnBlock(ctx context.Context, ver int, header 
 			return isValidPayload, err
 		}
 	}
+
+	// Assert that execution payload validity matches expectations
+	assert.Always(isValidPayload, "Execution payload should be valid", map[string]any{
+		"blockRoot": fmt.Sprintf("%#x", blockRoot),
+		"slot":      signed.Block().Slot(),
+	})
+
 	return isValidPayload, nil
 }

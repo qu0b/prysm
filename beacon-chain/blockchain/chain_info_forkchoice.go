@@ -6,6 +6,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/forkchoice"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // CachedHeadRoot returns the corresponding value from Forkchoice
@@ -52,6 +53,10 @@ func (s *Service) ReceivedBlocksLastEpoch() (uint64, error) {
 
 // InsertNode is a wrapper for node insertion which is self locked
 func (s *Service) InsertNode(ctx context.Context, st state.BeaconState, root [32]byte) error {
+	// Assert that the root is not zero
+	var zeroRoot [32]byte
+	assert.Always(root != zeroRoot, "InsertNode root must not be zero", map[string]any{"root": root})
+
 	s.cfg.ForkChoiceStore.Lock()
 	defer s.cfg.ForkChoiceStore.Unlock()
 	return s.cfg.ForkChoiceStore.InsertNode(ctx, st, root)
@@ -66,6 +71,9 @@ func (s *Service) ForkChoiceDump(ctx context.Context) (*forkchoice.Dump, error) 
 
 // NewSlot returns the corresponding value from forkchoice
 func (s *Service) NewSlot(ctx context.Context, slot primitives.Slot) error {
+	// Assert that the slot is greater than zero
+	assert.Always(slot > 0, "NewSlot slot must be greater than zero", map[string]any{"slot": slot})
+
 	s.cfg.ForkChoiceStore.Lock()
 	defer s.cfg.ForkChoiceStore.Unlock()
 	return s.cfg.ForkChoiceStore.NewSlot(ctx, slot)

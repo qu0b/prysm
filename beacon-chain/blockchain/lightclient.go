@@ -13,6 +13,7 @@ import (
 	ethpbv2 "github.com/prysmaticlabs/prysm/v5/proto/eth/v2"
 	"github.com/prysmaticlabs/prysm/v5/proto/migration"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 const (
@@ -62,6 +63,10 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 	attestedState state.BeaconState) (*ethpbv2.LightClientUpdate, error) {
 	// assert compute_epoch_at_slot(attested_state.slot) >= ALTAIR_FORK_EPOCH
 	attestedEpoch := slots.ToEpoch(attestedState.Slot())
+	assert.AlwaysGreaterThanOrEqualTo(attestedEpoch, params.BeaconConfig().AltairForkEpoch, "Attested epoch should be >= ALTAIR_FORK_EPOCH", map[string]any{
+		"attestedEpoch":     attestedEpoch,
+		"ALTAIR_FORK_EPOCH": params.BeaconConfig().AltairForkEpoch,
+	})
 	if attestedEpoch < params.BeaconConfig().AltairForkEpoch {
 		return nil, fmt.Errorf("invalid attested epoch %d", attestedEpoch)
 	}
@@ -71,12 +76,19 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 	if err != nil {
 		return nil, fmt.Errorf("could not get sync aggregate %v", err)
 	}
-
+	assert.AlwaysGreaterThanOrEqualTo(syncAggregate.SyncCommitteeBits.Count(), params.BeaconConfig().MinSyncCommitteeParticipants, "Sync committee bits count should be >= MIN_SYNC_COMMITTEE_PARTICIPANTS", map[string]any{
+		"syncCommitteeBitsCount":        syncAggregate.SyncCommitteeBits.Count(),
+		"MinSyncCommitteeParticipants": params.BeaconConfig().MinSyncCommitteeParticipants,
+	})
 	if syncAggregate.SyncCommitteeBits.Count() < params.BeaconConfig().MinSyncCommitteeParticipants {
 		return nil, fmt.Errorf("invalid sync committee bits count %d", syncAggregate.SyncCommitteeBits.Count())
 	}
 
 	// assert state.slot == state.latest_block_header.slot
+	assert.Always(state.Slot() == state.LatestBlockHeader().Slot, "State slot should equal latest block header slot", map[string]any{
+		"stateSlot":             state.Slot(),
+		"latestBlockHeaderSlot": state.LatestBlockHeader().Slot,
+	})
 	if state.Slot() != state.LatestBlockHeader().Slot {
 		return nil, fmt.Errorf("state slot %d not equal to latest block header slot %d", state.Slot(), state.LatestBlockHeader().Slot)
 	}
@@ -98,12 +110,19 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 	if err != nil {
 		return nil, fmt.Errorf("could not get block root %v", err)
 	}
-
+	assert.Always(bytes.Equal(headerRoot, blockRoot), "Header root should equal block root", map[string]any{
+		"headerRoot": headerRoot,
+		"blockRoot":  blockRoot,
+	})
 	if headerRoot != blockRoot {
 		return nil, fmt.Errorf("header root %#x not equal to block root %#x", headerRoot, blockRoot)
 	}
 
 	// assert attested_state.slot == attested_state.latest_block_header.slot
+	assert.Always(attestedState.Slot() == attestedState.LatestBlockHeader().Slot, "Attested state slot should equal latest block header slot", map[string]any{
+		"attestedStateSlot":             attestedState.Slot(),
+		"attestedLatestBlockHeaderSlot": attestedState.LatestBlockHeader().Slot,
+	})
 	if attestedState.Slot() != attestedState.LatestBlockHeader().Slot {
 		return nil, fmt.Errorf("attested state slot %d not equal to attested latest block header slot %d", attestedState.Slot(), attestedState.LatestBlockHeader().Slot)
 	}
@@ -123,7 +142,10 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 	if err != nil {
 		return nil, fmt.Errorf("could not get attested header root %v", err)
 	}
-
+	assert.Always(bytes.Equal(attestedHeaderRoot, block.Block().ParentRoot()), "Attested header root should equal block parent root", map[string]any{
+		"attestedHeaderRoot": attestedHeaderRoot,
+		"blockParentRoot":    block.Block().ParentRoot(),
+	})
 	if attestedHeaderRoot != block.Block().ParentRoot() {
 		return nil, fmt.Errorf("attested header root %#x not equal to block parent root %#x", attestedHeaderRoot, block.Block().ParentRoot())
 	}
@@ -183,11 +205,17 @@ func NewLightClientFinalityUpdateFromBeaconState(
 			if err != nil {
 				return nil, fmt.Errorf("could not get finalized header root %v", err)
 			}
-
+			assert.Always(bytes.Equal(finalizedHeaderRoot, bytesutil.ToBytes32(attestedState.FinalizedCheckpoint().Root)), "Finalized header root should equal attested finalized checkpoint root", map[string]any{
+				"finalizedHeaderRoot":             finalizedHeaderRoot,
+				"attestedFinalizedCheckpointRoot": attestedState.FinalizedCheckpoint().Root,
+			})
 			if finalizedHeaderRoot != bytesutil.ToBytes32(attestedState.FinalizedCheckpoint().Root) {
 				return nil, fmt.Errorf("finalized header root %#x not equal to attested finalized checkpoint root %#x", finalizedHeaderRoot, bytesutil.ToBytes32(attestedState.FinalizedCheckpoint().Root))
 			}
 		} else {
+			assert.Always(bytes.Equal(attestedState.FinalizedCheckpoint().Root, make([]byte, 32)), "When finalized block slot is zero, attested finalized checkpoint root should be zeroed", map[string]any{
+				"attestedFinalizedCheckpointRoot": attestedState.FinalizedCheckpoint().Root,
+			})
 			if !bytes.Equal(attestedState.FinalizedCheckpoint().Root, make([]byte, 32)) {
 				return nil, fmt.Errorf("invalid finalized header root %v", attestedState.FinalizedCheckpoint().Root)
 			}

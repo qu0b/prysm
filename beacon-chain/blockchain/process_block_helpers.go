@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/feed"
 	statefeed "github.com/prysmaticlabs/prysm/v5/beacon-chain/core/feed/state"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/transition"
@@ -85,6 +86,8 @@ func (s *Service) fcuArgsNonCanonicalBlock(cfg *postBlockProcessConfig, fcuArgs 
 	if err != nil {
 		return err
 	}
+	assert.Always(headState != nil && !headState.IsNil(), "Head state should not be nil", map[string]any{"headRoot": cfg.headRoot})
+	assert.Always(headBlock != nil, "Head block should not be nil", map[string]any{"headRoot": cfg.headRoot})
 	fcuArgs.headState = headState
 	fcuArgs.headBlock = headBlock
 	fcuArgs.headRoot = cfg.headRoot
@@ -143,6 +146,10 @@ func (s *Service) tryPublishLightClientFinalityUpdate(ctx context.Context, signe
 	}
 
 	// LightClientFinalityUpdate needs super majority
+	assert.Always(syncAggregate.SyncCommitteeBits.Count()*3 >= config.SyncCommitteeSize*2, "Light client finality update requires super majority", map[string]any{
+		"syncCommitteeBitsCount": syncAggregate.SyncCommitteeBits.Count(),
+		"syncCommitteeSize":      config.SyncCommitteeSize,
+	})
 	if syncAggregate.SyncCommitteeBits.Count()*3 < config.SyncCommitteeSize*2 {
 		return
 	}
@@ -294,6 +301,7 @@ func (s *Service) getBlockPreState(ctx context.Context, b interfaces.ReadOnlyBea
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not get pre state for slot %d", b.Slot())
 	}
+	assert.Always(preState != nil && !preState.IsNil(), "PreState should not be nil", map[string]any{"slot": b.Slot()})
 	if preState == nil || preState.IsNil() {
 		return nil, errors.Wrapf(err, "nil pre state for slot %d", b.Slot())
 	}
@@ -328,6 +336,7 @@ func (s *Service) verifyBlkPreState(ctx context.Context, b interfaces.ReadOnlyBe
 	if err != nil {
 		return err
 	}
+	assert.Always(has, "State should exist for parent root", map[string]any{"parentRoot": parentRoot})
 	if !has {
 		if err := s.cfg.BeaconDB.SaveBlocks(ctx, s.getInitSyncBlocks()); err != nil {
 			return errors.Wrap(err, "could not save initial sync blocks")
@@ -345,6 +354,10 @@ func (s *Service) verifyBlkFinalizedSlot(b interfaces.ReadOnlyBeaconBlock) error
 	if err != nil {
 		return err
 	}
+	assert.Always(finalizedSlot < b.Slot(), "Block must be after finalized slot", map[string]any{
+		"blockSlot":     b.Slot(),
+		"finalizedSlot": finalizedSlot,
+	})
 	if finalizedSlot >= b.Slot() {
 		err = fmt.Errorf("block is equal or earlier than finalized block, slot %d < slot %d", b.Slot(), finalizedSlot)
 		return invalidBlock{error: err}
@@ -364,6 +377,10 @@ func (s *Service) updateFinalized(ctx context.Context, cp *ethpb.Checkpoint) err
 	if err != nil {
 		return err
 	}
+	assert.Always(cp.Epoch > currentFinalized.Epoch, "New finalized epoch should be greater than current", map[string]any{
+		"newEpoch":     cp.Epoch,
+		"currentEpoch": currentFinalized.Epoch,
+	})
 	if cp.Epoch <= currentFinalized.Epoch {
 		return nil
 	}
@@ -489,6 +506,10 @@ func (s *Service) insertFinalizedDeposits(ctx context.Context, fRoot [32]byte) {
 	// to be included(rather than the last one to be processed). This was most likely
 	// done as the state cannot represent signed integers.
 	finalizedEth1DepIdx := eth1DepositIndex - 1
+	assert.Always(finalizedEth1DepIdx >= 0, "Finalized Eth1 deposit index should be non-negative", map[string]any{
+		"eth1DepositIndex":        eth1DepositIndex,
+		"finalizedEth1DepositIdx": finalizedEth1DepIdx,
+	})
 	if err = s.cfg.DepositCache.InsertFinalizedDeposits(ctx, int64(finalizedEth1DepIdx), common.Hash(finalizedState.Eth1Data().BlockHash),
 		0 /* Setting a zero value as we have no access to block height */); err != nil {
 		log.WithError(err).Error("could not insert finalized deposits")

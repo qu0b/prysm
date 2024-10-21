@@ -6,6 +6,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
+
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // NewSlot mimics the implementation of `on_tick` in fork choice consensus spec.
@@ -33,14 +35,40 @@ func (f *ForkChoice) NewSlot(ctx context.Context, slot primitives.Slot) error {
 	// Reset proposer boost root
 	f.store.proposerBoostRoot = [32]byte{}
 
+	// Assert that the current slot is greater than or equal to the last processed slot
+	assert.Always(slot >= f.store.latestSlot, "Slot progression must be non-decreasing", map[string]any{
+		"current_slot": slot,
+		"last_slot":    f.store.latestSlot,
+	})
+
 	// Return if it's not a new epoch.
 	if !slots.IsEpochStart(slot) {
 		return nil
 	}
 
+	// Assert that slots since epoch start is zero at epoch start
+	slotsSinceEpochStart := slots.SlotsSinceEpochStart(slot)
+	assert.Always(slotsSinceEpochStart == 0, "At epoch start, slots since epoch start should be zero", map[string]any{
+		"slots_since_epoch_start": slotsSinceEpochStart,
+		"current_slot":            slot,
+	})
+
 	// Update store.justified_checkpoint if a better checkpoint on the store.finalized_checkpoint chain
 	if err := f.updateUnrealizedCheckpoints(ctx); err != nil {
+		// Assert that updateUnrealizedCheckpoints should not fail
+		assert.Unreachable("updateUnrealizedCheckpoints failed", map[string]any{
+			"error":        err.Error(),
+			"current_slot": slot,
+		})
 		return errors.Wrap(err, "could not update unrealized checkpoints")
 	}
+
+	// Assert that the justified checkpoint epoch is greater than or equal to the finalized checkpoint epoch
+	assert.Always(f.store.justifiedCheckpoint.Epoch >= f.store.finalizedCheckpoint.Epoch, "Justified checkpoint epoch must be >= finalized checkpoint epoch", map[string]any{
+		"justified_epoch": f.store.justifiedCheckpoint.Epoch,
+		"finalized_epoch": f.store.finalizedCheckpoint.Epoch,
+		"current_slot":    slot,
+	})
+
 	return f.store.prune(ctx)
 }

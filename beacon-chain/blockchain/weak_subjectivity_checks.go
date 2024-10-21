@@ -11,6 +11,8 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/encoding/bytesutil"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
+
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 type weakSubjectivityDB interface {
@@ -55,6 +57,20 @@ func (v *WeakSubjectivityVerifier) VerifyWeakSubjectivity(ctx context.Context, f
 	if v.verified || !v.enabled {
 		return nil
 	}
+
+	// Assert that v.db is not nil
+	assert.Always(v.db != nil, "WeakSubjectivityVerifier db should not be nil", nil)
+
+	// Zero value for [32]byte
+	var zeroRoot [32]byte
+	// Assert that v.root is not zero
+	assert.Always(v.root != zeroRoot, "WeakSubjectivityVerifier root should not be zero", nil)
+
+	// Assert that v.slot is valid (non-negative)
+	assert.Always(v.slot >= 0, "WeakSubjectivityVerifier slot should be non-negative", map[string]any{
+		"slot": v.slot,
+	})
+
 	// Two conditions are described in the specs:
 	// IF epoch_number > store.finalized_checkpoint.epoch,
 	// then ASSERT during block sync that block with root block_root
@@ -68,12 +84,33 @@ func (v *WeakSubjectivityVerifier) VerifyWeakSubjectivity(ctx context.Context, f
 	if v.epoch > finalizedEpoch {
 		return nil
 	}
+
+	// Assert that v.epoch <= finalizedEpoch
+	assert.Always(v.epoch <= finalizedEpoch, "WeakSubjectivityVerifier epoch should be less than or equal to finalizedEpoch", map[string]any{
+		"v.epoch":        v.epoch,
+		"finalizedEpoch": finalizedEpoch,
+	})
+
 	log.Infof("Performing weak subjectivity check for root %#x in epoch %d", v.root, v.epoch)
 
-	if !v.db.HasBlock(ctx, v.root) {
+	// Assert that block exists in database
+	hasBlock := v.db.HasBlock(ctx, v.root)
+	assert.Always(hasBlock, "Weak subjectivity block must exist in database", map[string]any{
+		"root": v.root,
+	})
+
+	if !hasBlock {
 		return errors.Wrap(errWSBlockNotFound, fmt.Sprintf("missing root %#x", v.root))
 	}
+
 	endSlot := v.slot + params.BeaconConfig().SlotsPerEpoch
+
+	// Assert that endSlot > v.slot
+	assert.Always(endSlot > v.slot, "End slot should be greater than start slot", map[string]any{
+		"startSlot": v.slot,
+		"endSlot":   endSlot,
+	})
+
 	filter := filters.NewFilter().SetStartSlot(v.slot).SetEndSlot(endSlot)
 	// A node should have the weak subjectivity block corresponds to the correct epoch in the DB.
 	log.Infof("Searching block roots for weak subjectivity root=%#x, between slots %d-%d", v.root, v.slot, endSlot)
@@ -81,6 +118,14 @@ func (v *WeakSubjectivityVerifier) VerifyWeakSubjectivity(ctx context.Context, f
 	if err != nil {
 		return errors.Wrap(err, "error while retrieving block roots to verify weak subjectivity")
 	}
+
+	// Assert that roots are retrieved
+	assert.Always(len(roots) > 0, "Block roots should be retrieved for given slot range", map[string]any{
+		"startSlot":      v.slot,
+		"endSlot":        endSlot,
+		"retrievedRoots": len(roots),
+	})
+
 	for _, root := range roots {
 		if v.root == root {
 			log.Info("Weak subjectivity check has passed!!")

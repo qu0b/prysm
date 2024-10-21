@@ -15,6 +15,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/encoding/bytesutil"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/runtime/version"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 var (
@@ -228,9 +229,22 @@ func reportSlotMetrics(stateSlot, headSlot, clockSlot primitives.Slot, finalized
 	clockTimeSlot.Set(float64(clockSlot))
 	beaconSlot.Set(float64(stateSlot))
 	beaconHeadSlot.Set(float64(headSlot))
+	assert.AlwaysLessThanOrEqualTo(stateSlot, clockSlot, "stateSlot should not be ahead of clockSlot", map[string]any{
+		"state_slot": stateSlot,
+		"clock_slot": clockSlot,
+	})
+	assert.AlwaysLessThanOrEqualTo(headSlot, stateSlot, "headSlot should not be ahead of stateSlot", map[string]any{
+		"head_slot":  headSlot,
+		"state_slot": stateSlot,
+	})
 	if finalizedCheckpoint != nil {
 		headFinalizedEpoch.Set(float64(finalizedCheckpoint.Epoch))
 		headFinalizedRoot.Set(float64(bytesutil.ToLowInt64(finalizedCheckpoint.Root)))
+		expectedFinalizedEpoch := stateSlot / params.BeaconConfig().SlotsPerEpoch
+		assert.AlwaysLessThanOrEqualTo(primitives.Epoch(finalizedCheckpoint.Epoch), primitives.Epoch(expectedFinalizedEpoch), "Finalized checkpoint epoch should not be ahead of expected epoch", map[string]any{
+			"finalized_epoch": finalizedCheckpoint.Epoch,
+			"expected_epoch":  expectedFinalizedEpoch,
+		})
 	}
 }
 
@@ -298,6 +312,16 @@ func reportEpochMetrics(ctx context.Context, postState, headState state.BeaconSt
 	activeBalance += exitingBalance + slashingBalance
 	activeEffectiveBalance += exitingEffectiveBalance + slashingEffectiveBalance
 
+	totalInstances := pendingInstances + activeInstances + exitedInstances + slashedInstances
+	assert.Always(totalInstances == postState.NumValidators(), "Total validator instances should equal number of validators in state", map[string]any{
+		"total_instances":    totalInstances,
+		"num_validators":     postState.NumValidators(),
+		"pending_instances":  pendingInstances,
+		"active_instances":   activeInstances,
+		"exited_instances":   exitedInstances,
+		"slashed_instances":  slashedInstances,
+	})
+
 	activeValidatorCount.Set(float64(activeInstances))
 	validatorsCount.WithLabelValues("Pending").Set(float64(pendingInstances))
 	validatorsCount.WithLabelValues("Active").Set(float64(activeInstances))
@@ -324,6 +348,10 @@ func reportEpochMetrics(ctx context.Context, postState, headState state.BeaconSt
 	// Last finalized slot
 	beaconFinalizedEpoch.Set(float64(postState.FinalizedCheckpointEpoch()))
 	beaconFinalizedRoot.Set(float64(bytesutil.ToLowInt64(postState.FinalizedCheckpoint().Root)))
+	assert.AlwaysLessThanOrEqualTo(postState.FinalizedCheckpointEpoch(), currentEpoch, "Finalized checkpoint epoch should not be ahead of current epoch", map[string]any{
+		"finalized_epoch": postState.FinalizedCheckpointEpoch(),
+		"current_epoch":   currentEpoch,
+	})
 	currentEth1DataDepositCount.Set(float64(postState.Eth1Data().DepositCount))
 	processedDepositsCount.Set(float64(postState.Eth1DepositIndex() + 1))
 
@@ -350,6 +378,9 @@ func reportEpochMetrics(ctx context.Context, postState, headState state.BeaconSt
 			return err
 		}
 	} else {
+		assert.Unreachable("Encountered an invalid state version", map[string]any{
+			"state_version": headState.Version(),
+		})
 		return errors.Errorf("invalid state type provided: %T", headState.ToProtoUnsafe())
 	}
 

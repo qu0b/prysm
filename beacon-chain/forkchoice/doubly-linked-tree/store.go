@@ -11,6 +11,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 	"go.opencensus.io/trace"
+        "github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // head starts from justified root and then follows the best descendant links
@@ -88,7 +89,7 @@ func (s *Store) insert(ctx context.Context,
 		timestamp:                uint64(time.Now().Unix()),
 	}
 
-	// Set the node's target checkpoint
+	// Set the node's target
 	if slot%params.BeaconConfig().SlotsPerEpoch == 0 {
 		n.target = n
 	} else if parent != nil {
@@ -110,6 +111,12 @@ func (s *Store) insert(ctx context.Context,
 			return n, errInvalidParentRoot
 		}
 	} else {
+		assert.AlwaysGreaterThanOrEqualTo(n.slot, parent.slot, "Insert: child slot >= parent slot", map[string]any{
+			"child.slot": n.slot,
+			"parent.slot": parent.slot,
+			"child.root": n.root,
+			"parent.root": parent.root,
+		})
 		parent.children = append(parent.children, n)
 		// Apply proposer boost
 		timeNow := uint64(time.Now().Unix())

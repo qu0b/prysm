@@ -44,6 +44,8 @@ import (
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	prysmTime "github.com/prysmaticlabs/prysm/v5/time"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
+
+	assert "github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // Service represents a service that handles the internal
@@ -307,6 +309,10 @@ func (s *Service) StartFromSavedState(saved state.BeaconState) error {
 	if err := s.cfg.ForkChoiceStore.InsertNode(s.ctx, st, fRoot); err != nil {
 		return errors.Wrap(err, "could not insert finalized block to forkchoice")
 	}
+	// Assertion to ensure ForkChoiceStore contains the finalized root after insertion
+	assert.Always(s.cfg.ForkChoiceStore.HasNode(fRoot), "Fork choice store contains finalized root after insertion", map[string]interface{}{
+		"finalizedRoot": fRoot,
+	})
 	if !features.Get().EnableStartOptimistic {
 		lastValidatedCheckpoint, err := s.cfg.BeaconDB.LastValidatedCheckpoint(s.ctx)
 		if err != nil {

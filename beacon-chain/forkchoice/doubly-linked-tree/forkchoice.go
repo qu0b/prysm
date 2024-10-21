@@ -20,6 +20,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // New initializes a new fork choice store.
@@ -57,6 +58,8 @@ func (f *ForkChoice) Head(
 
 	calledHeadCount.Inc()
 
+	assert.Always(f.store.treeRootNode != nil, "Tree root node should not be nil in Head", nil)
+
 	if err := f.updateBalances(); err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not update balances")
 	}
@@ -75,6 +78,9 @@ func (f *ForkChoice) Head(
 	if err := f.store.treeRootNode.updateBestDescendant(ctx, jc.Epoch, fc.Epoch, currentEpoch); err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not update best descendant")
 	}
+
+	assert.Always(f.store.headNode != nil, "Head node should not be nil after updateBestDescendant", nil)
+
 	return f.store.head(ctx)
 }
 
@@ -139,6 +145,11 @@ func (f *ForkChoice) InsertNode(ctx context.Context, state state.BeaconState, ro
 	if err != nil {
 		return err
 	}
+
+	assert.Always(node != nil, "Inserted node should not be nil", map[string]any{
+		"root": root,
+		"slot": slot,
+	})
 
 	jc, fc = f.store.pullTips(state, node, jc, fc)
 	return f.updateCheckpoints(ctx, jc, fc)
@@ -308,6 +319,13 @@ func (f *ForkChoice) updateBalances() error {
 				if currentNode == nil {
 					return errors.Wrap(ErrNilNode, "could not update balances")
 				}
+
+				assert.AlwaysGreaterThanOrEqualTo(currentNode.balance, oldBalance, "Current node balance should be greater than or equal to old balance", map[string]any{
+					"currentNode.balance": currentNode.balance,
+					"oldBalance":          oldBalance,
+					"currentNodeRoot":     currentNode.root,
+				})
+
 				if currentNode.balance < oldBalance {
 					log.WithFields(logrus.Fields{
 						"nodeRoot":                   fmt.Sprintf("%#x", bytesutil.Trunc(vote.currentRoot[:])),
@@ -396,6 +414,12 @@ func (f *ForkChoice) InsertSlashedIndex(_ context.Context, index primitives.Vali
 	if !ok || node == nil {
 		return
 	}
+
+	assert.AlwaysGreaterThanOrEqualTo(node.balance, f.balances[index], "Node balance should be greater than or equal to the validator's balance", map[string]any{
+		"node.balance":      node.balance,
+		"validatorIndex":    index,
+		"validatorBalance":  f.balances[index],
+	})
 
 	if node.balance < f.balances[index] {
 		node.balance = 0

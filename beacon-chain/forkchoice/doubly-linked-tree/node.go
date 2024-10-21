@@ -9,6 +9,7 @@ import (
 	forkchoice2 "github.com/prysmaticlabs/prysm/v5/consensus-types/forkchoice"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // ProcessAttestationsThreshold  is the number of seconds after which we
@@ -24,6 +25,8 @@ func (n *Node) applyWeightChanges(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		// Add assertion to ensure child is not nil
+		assert.Always(child != nil, "Child node should not be nil in applyWeightChanges", map[string]any{"parentRoot": n.root})
 		if err := child.applyWeightChanges(ctx); err != nil {
 			return err
 		}
@@ -33,6 +36,8 @@ func (n *Node) applyWeightChanges(ctx context.Context) error {
 		return nil
 	}
 	n.weight = n.balance + childrenWeight
+	// Add assertion to ensure weight is at least balance
+	assert.Always(n.weight >= n.balance, "Node weight must be at least equal to balance", map[string]any{"nodeRoot": n.root, "balance": n.balance, "weight": n.weight})
 	return nil
 }
 
@@ -86,6 +91,8 @@ func (n *Node) updateBestDescendant(ctx context.Context, justifiedEpoch, finaliz
 	} else {
 		n.bestDescendant = nil
 	}
+	// Add assertion to ensure bestDescendant is set correctly
+	assert.Always((hasViableDescendant && n.bestDescendant != nil) || (!hasViableDescendant && n.bestDescendant == nil), "Best descendant should be set correctly", map[string]any{"nodeRoot": n.root, "hasViableDescendant": hasViableDescendant, "bestDescendant": n.bestDescendant})
 	return nil
 }
 
@@ -133,6 +140,9 @@ func (n *Node) setNodeAndParentValidated(ctx context.Context) error {
 // slot will have secs = 3 below.
 func (n *Node) arrivedEarly(genesisTime uint64) (bool, error) {
 	secs, err := slots.SecondsSinceSlotStart(n.slot, genesisTime, n.timestamp)
+	// Add assertion that error is nil and secs is non-negative
+	assert.Always(err == nil, "Error calculating seconds since slot start in arrivedEarly", map[string]any{"nodeRoot": n.root, "slot": n.slot, "timestamp": n.timestamp, "error": err})
+	assert.Always(secs >= 0, "Seconds since slot start should not be negative in arrivedEarly", map[string]any{"nodeRoot": n.root, "slot": n.slot, "timestamp": n.timestamp, "secs": secs})
 	votingWindow := params.BeaconConfig().SecondsPerSlot / params.BeaconConfig().IntervalsPerSlot
 	return secs < votingWindow, err
 }
@@ -144,6 +154,9 @@ func (n *Node) arrivedEarly(genesisTime uint64) (bool, error) {
 // slot will have secs = 10 below.
 func (n *Node) arrivedAfterOrphanCheck(genesisTime uint64) (bool, error) {
 	secs, err := slots.SecondsSinceSlotStart(n.slot, genesisTime, n.timestamp)
+	// Add assertion that error is nil and secs is non-negative
+	assert.Always(err == nil, "Error calculating seconds since slot start in arrivedAfterOrphanCheck", map[string]any{"nodeRoot": n.root, "slot": n.slot, "timestamp": n.timestamp, "error": err})
+	assert.Always(secs >= 0, "Seconds since slot start should not be negative in arrivedAfterOrphanCheck", map[string]any{"nodeRoot": n.root, "slot": n.slot, "timestamp": n.timestamp, "secs": secs})
 	return secs >= ProcessAttestationsThreshold, err
 }
 
@@ -179,6 +192,8 @@ func (n *Node) nodeTreeDump(ctx context.Context, nodes []*forkchoice2.Node) ([]*
 	nodes = append(nodes, thisNode)
 	var err error
 	for _, child := range n.children {
+		// Add assertion to ensure child is not nil
+		assert.Always(child != nil, "Child node should not be nil in nodeTreeDump", map[string]any{"parentRoot": n.root})
 		nodes, err = child.nodeTreeDump(ctx, nodes)
 		if err != nil {
 			return nil, err

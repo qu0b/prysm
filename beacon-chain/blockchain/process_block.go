@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
-
+	
+	"github.com/antithesishq/antithesis-sdk-go/assert"  // Added for assertions
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -80,6 +81,13 @@ func (s *Service) postBlockProcess(cfg *postBlockProcessConfig) error {
 	if err != nil {
 		return errors.Wrapf(err, "could not insert block %d to fork choice store", cfg.signed.Block().Slot())
 	}
+	
+	// Assert that the block has been successfully inserted into ForkChoiceStore
+	assert.Always(s.cfg.ForkChoiceStore.HasNode(cfg.blockRoot), "Block should exist in ForkChoiceStore after insertion", map[string]any{
+		"blockRoot": cfg.blockRoot,
+		"slot":      cfg.signed.Block().Slot(),
+	})
+
 	if err := s.handleBlockAttestations(ctx, cfg.signed.Block(), cfg.postState); err != nil {
 		return errors.Wrap(err, "could not handle block's attestations")
 	}
@@ -96,10 +104,24 @@ func (s *Service) postBlockProcess(cfg *postBlockProcessConfig) error {
 		log.WithError(err).Warn("Could not update head")
 	}
 	newBlockHeadElapsedTime.Observe(float64(time.Since(start).Milliseconds()))
+	
+	// Assert that the head of the fork choice is updated correctly
+	assert.Always(cfg.headRoot != [32]byte{}, "Head root should not be empty after updating", map[string]any{
+		"headRoot": cfg.headRoot,
+	})
+
 	if cfg.headRoot != cfg.blockRoot {
 		s.logNonCanonicalBlockReceived(cfg.blockRoot, cfg.headRoot)
 		return nil
 	}
+	
+	// Assert that the head root matches the block root when they are expected to be equal
+	assert.Always(cfg.headRoot == cfg.blockRoot, "Head root should match block root", map[string]any{
+		"headRoot":  cfg.headRoot,
+		"blockRoot": cfg.blockRoot,
+		"slot":      cfg.signed.Block().Slot(),
+	})
+
 	if err := s.getFCUArgs(cfg, fcuArgs); err != nil {
 		log.WithError(err).Error("Could not get forkchoice update argument")
 		return nil
@@ -283,6 +305,13 @@ func (s *Service) onBlockBatch(ctx context.Context, blks []consensusblocks.ROBlo
 	if err := s.cfg.ForkChoiceStore.InsertNode(ctx, preState, lastBR); err != nil {
 		return errors.Wrap(err, "could not insert last block in batch to forkchoice")
 	}
+	
+	// Assert that the last block is in the ForkChoiceStore after insertion
+	assert.Always(s.cfg.ForkChoiceStore.HasNode(lastBR), "Last block should exist in ForkChoiceStore after batch insertion", map[string]any{
+		"blockRoot": lastBR,
+		"slot":      lastB.Block().Slot(),
+	})
+	
 	// Set their optimistic status
 	if isValidPayload {
 		if err := s.cfg.ForkChoiceStore.SetOptimisticToValid(ctx, lastBR); err != nil {

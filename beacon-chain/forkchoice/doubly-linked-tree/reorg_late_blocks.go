@@ -3,6 +3,7 @@ package doublylinkedtree
 import (
 	"time"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 )
@@ -52,6 +53,7 @@ func (f *ForkChoice) ShouldOverrideFCU() (override bool) {
 	}
 	// Only reorg blocks that arrive late
 	early, err := head.arrivedEarly(f.store.genesisTime)
+	assert.Always(err == nil, "arrivedEarly returned error in ShouldOverrideFCU", map[string]any{"error": err})
 	if err != nil {
 		log.WithError(err).Error("could not check if block arrived early")
 		return
@@ -78,12 +80,15 @@ func (f *ForkChoice) ShouldOverrideFCU() (override bool) {
 	// }
 
 	// Only orphan a block if the head LMD vote is weak
+	assert.Always(head.weight >= 0, "head weight negative in ShouldOverrideFCU", map[string]any{"head_weight": head.weight})
+	assert.Always(f.store.committeeWeight > 0, "committee weight non-positive in ShouldOverrideFCU", map[string]any{"committee_weight": f.store.committeeWeight})
 	if head.weight*100 > f.store.committeeWeight*params.BeaconConfig().ReorgWeightThreshold {
 		return
 	}
 
 	// Return early if we are checking before 10 seconds into the slot
 	secs, err := slots.SecondsSinceSlotStart(head.slot, f.store.genesisTime, uint64(time.Now().Unix()))
+	assert.Always(err == nil, "SecondsSinceSlotStart returned error in ShouldOverrideFCU", map[string]any{"error": err})
 	if err != nil {
 		log.WithError(err).Error("could not check current slot")
 		return true
@@ -92,6 +97,7 @@ func (f *ForkChoice) ShouldOverrideFCU() (override bool) {
 		return true
 	}
 	// Only orphan a block if the parent LMD vote is strong
+	assert.Always(parent.weight >= 0, "parent weight negative in ShouldOverrideFCU", map[string]any{"parent_weight": parent.weight})
 	if parent.weight*100 < f.store.committeeWeight*params.BeaconConfig().ReorgParentWeightThreshold {
 		return
 	}
@@ -121,6 +127,7 @@ func (f *ForkChoice) GetProposerHead() [32]byte {
 	}
 	// Only reorg blocks that arrive late
 	early, err := head.arrivedEarly(f.store.genesisTime)
+	assert.Always(err == nil, "arrivedEarly returned error in GetProposerHead", map[string]any{"error": err})
 	if err != nil {
 		log.WithError(err).Error("could not check if block arrived early")
 		return head.root
@@ -143,17 +150,21 @@ func (f *ForkChoice) GetProposerHead() [32]byte {
 	}
 
 	// Only orphan a block if the head LMD vote is weak
+	assert.Always(head.weight >= 0, "head weight negative in GetProposerHead", map[string]any{"head_weight": head.weight})
+	assert.Always(f.store.committeeWeight > 0, "committee weight non-positive in GetProposerHead", map[string]any{"committee_weight": f.store.committeeWeight})
 	if head.weight*100 > f.store.committeeWeight*params.BeaconConfig().ReorgWeightThreshold {
 		return head.root
 	}
 
 	// Only orphan a block if the parent LMD vote is strong
+	assert.Always(parent.weight >= 0, "parent weight negative in GetProposerHead", map[string]any{"parent_weight": parent.weight})
 	if parent.weight*100 < f.store.committeeWeight*params.BeaconConfig().ReorgParentWeightThreshold {
 		return head.root
 	}
 
 	// Only reorg if we are proposing early
 	secs, err := slots.SecondsSinceSlotStart(head.slot+1, f.store.genesisTime, uint64(time.Now().Unix()))
+	assert.Always(err == nil, "SecondsSinceSlotStart returned error in GetProposerHead", map[string]any{"error": err})
 	if err != nil {
 		log.WithError(err).Error("could not check if proposing early")
 		return head.root

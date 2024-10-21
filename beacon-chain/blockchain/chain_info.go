@@ -21,6 +21,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/encoding/bytesutil"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // ChainInfoFetcher defines a common interface for methods in blockchain service which
@@ -355,6 +356,15 @@ func (s *Service) IsOptimistic(_ context.Context) (bool, error) {
 	headSlot := s.head.slot
 	headOptimistic := s.head.optimistic
 	s.headLock.RUnlock()
+	// Assert that headSlot is not zero
+	assert.Always(headSlot != 0, "Head slot should not be zero", map[string]any{
+		"head_slot": headSlot,
+	})
+	// Assert that headSlot is less than or equal to current slot
+	assert.AlwaysLessThanOrEqualTo(headSlot, s.CurrentSlot(), "Head slot should not be greater than current slot", map[string]any{
+		"head_slot":    headSlot,
+		"current_slot": s.CurrentSlot(),
+	})
 	// we trust the head package for recent head slots, otherwise fallback to forkchoice
 	if headSlot+2 >= s.CurrentSlot() {
 		return headOptimistic, nil
@@ -369,7 +379,7 @@ func (s *Service) IsOptimistic(_ context.Context) (bool, error) {
 	if !errors.Is(err, doublylinkedtree.ErrNilNode) {
 		return true, err
 	}
-	// If fockchoice does not have the headroot, then the node is considered
+	// If forkchoice does not have the headroot, then the node is considered
 	// optimistic
 	return true, nil
 }
@@ -387,7 +397,12 @@ func (s *Service) IsFinalized(ctx context.Context, root [32]byte) bool {
 	if s.cfg.ForkChoiceStore.HasNode(root) {
 		return false
 	}
-	return s.cfg.BeaconDB.IsFinalizedBlock(ctx, root)
+	finalized := s.cfg.BeaconDB.IsFinalizedBlock(ctx, root)
+	// Assertion: If the block is not in ForkChoiceStore and not in BeaconDB, then something is wrong.
+	assert.Always(finalized, "Block should be finalized if not in ForkChoiceStore", map[string]any{
+		"block_root": root,
+	})
+	return finalized
 }
 
 // InForkchoice returns true if the given root is found in forkchoice
@@ -440,6 +455,11 @@ func (s *Service) IsOptimisticForRoot(ctx context.Context, root [32]byte) (bool,
 			return true, err
 		}
 	}
+	// Ensure that the state summary slot is not zero
+	assert.Always(ss.Slot != 0, "State summary slot should not be zero", map[string]any{
+		"state_summary_slot": ss.Slot,
+		"block_root":         root,
+	})
 	validatedCheckpoint, err := s.cfg.BeaconDB.LastValidatedCheckpoint(ctx)
 	if err != nil {
 		return false, err
@@ -514,6 +534,12 @@ func (s *Service) Ancestor(ctx context.Context, root []byte, slot primitives.Slo
 			return nil, err
 		}
 	}
+	// Assert that the ancestor root is not zero
+	assert.Always(ar != [32]byte{}, "Ancestor root should not be zero", map[string]any{
+		"ancestor_root": ar,
+		"slot":          slot,
+		"root":          r,
+	})
 
 	return ar[:], nil
 }
@@ -529,7 +555,7 @@ func (s *Service) SetOptimisticToInvalid(ctx context.Context, root, parent, lvh 
 func (s *Service) SetGenesisTime(t time.Time) {
 	s.genesisTime = t
 }
-
+// recoverStateSummary tries to recover state summary from the block if missing.
 func (s *Service) recoverStateSummary(ctx context.Context, blockRoot [32]byte) (*ethpb.StateSummary, error) {
 	if s.cfg.BeaconDB.HasBlock(ctx, blockRoot) {
 		b, err := s.cfg.BeaconDB.Block(ctx, blockRoot)
@@ -540,6 +566,12 @@ func (s *Service) recoverStateSummary(ctx context.Context, blockRoot [32]byte) (
 		if err := s.cfg.BeaconDB.SaveStateSummary(ctx, summary); err != nil {
 			return nil, err
 		}
+		// Assert that the summary slot matches the block slot
+		assert.Always(summary.Slot == b.Block().Slot(), "State summary slot should match block slot", map[string]any{
+			"summary_slot": summary.Slot,
+			"block_slot":   b.Block().Slot(),
+			"block_root":   blockRoot,
+		})
 		return summary, nil
 	}
 	return nil, errBlockDoesNotExist

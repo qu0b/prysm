@@ -5,6 +5,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
+
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func (s *Store) setOptimisticToInvalid(ctx context.Context, root, parentRoot, lastValidHash [32]byte) ([][32]byte, error) {
@@ -23,6 +25,10 @@ func (s *Store) setOptimisticToInvalid(ctx context.Context, root, parentRoot, la
 		if node == nil {
 			return invalidRoots, errors.Wrap(ErrNilNode, "could not set node to invalid")
 		}
+		// Assert that node.parent is not nil
+		assert.Always(node.parent != nil, "node.parent is not nil in setOptimisticToInvalid else block", map[string]any{
+			"node_root": node.root,
+		})
 		if node.parent.root != parentRoot {
 			return invalidRoots, errInvalidParentRoot
 		}
@@ -42,6 +48,10 @@ func (s *Store) setOptimisticToInvalid(ctx context.Context, root, parentRoot, la
 		}
 		firstInvalid = node
 	}
+	// Assert that firstInvalid is not nil before calling removeNode
+	assert.Always(firstInvalid != nil, "firstInvalid is not nil before removeNode", map[string]any{
+		"firstInvalid_root": firstInvalid.root,
+	})
 	return s.removeNode(ctx, firstInvalid)
 }
 
@@ -61,8 +71,10 @@ func (s *Store) removeNode(ctx context.Context, node *Node) ([][32]byte, error) 
 	if len(children) == 1 {
 		node.parent.children = []*Node{}
 	} else {
+		foundNode := false
 		for i, n := range children {
 			if n == node {
+				foundNode = true
 				if i != len(children)-1 {
 					children[i] = children[len(children)-1]
 				}
@@ -70,6 +82,11 @@ func (s *Store) removeNode(ctx context.Context, node *Node) ([][32]byte, error) 
 				break
 			}
 		}
+		// Assert that we found the node in parent's children
+		assert.Always(foundNode, "node found in parent.children during removal", map[string]any{
+			"node_root":   node.root,
+			"parent_root": node.parent.root,
+		})
 	}
 	return s.removeNodeAndChildren(ctx, node, invalidRoots)
 }
@@ -93,7 +110,15 @@ func (s *Store) removeNodeAndChildren(ctx context.Context, node *Node, invalidRo
 		s.previousProposerBoostRoot = params.BeaconConfig().ZeroHash
 		s.previousProposerBoostScore = 0
 	}
+	// Assert that node exists in s.nodeByRoot before deleting
+	assert.Always(s.nodeByRoot[node.root] != nil, "node exists in s.nodeByRoot before deleting", map[string]any{
+		"node_root": node.root,
+	})
 	delete(s.nodeByRoot, node.root)
 	delete(s.nodeByPayload, node.payloadHash)
+	// Assert that node no longer exists in s.nodeByRoot after deleting
+	assert.Always(s.nodeByRoot[node.root] == nil, "node no longer exists in s.nodeByRoot after deleting", map[string]any{
+		"node_root": node.root,
+	})
 	return invalidRoots, nil
 }

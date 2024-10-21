@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
@@ -24,4 +25,8 @@ func (s *Service) defragmentState(st state.BeaconState) {
 	st.Defragment()
 	elapsedTime := time.Since(startTime)
 	stateDefragmentationTime.Observe(float64(elapsedTime.Milliseconds()))
+
+	assert.AlwaysLessThanOrEqualTo(elapsedTime.Milliseconds(), int64(1000), "Defragmentation should complete within 1000ms", map[string]any{
+		"elapsed_time_ms": elapsedTime.Milliseconds(),
+	})
 }
