@@ -66,11 +66,6 @@ func (v *WeakSubjectivityVerifier) VerifyWeakSubjectivity(ctx context.Context, f
 	// Assert that v.root is not zero
 	assert.Always(v.root != zeroRoot, "WeakSubjectivityVerifier root should not be zero", nil)
 
-	// Assert that v.slot is valid (non-negative)
-	assert.Always(v.slot >= 0, "WeakSubjectivityVerifier slot should be non-negative", map[string]any{
-		"slot": v.slot,
-	})
-
 	// Two conditions are described in the specs:
 	// IF epoch_number > store.finalized_checkpoint.epoch,
 	// then ASSERT during block sync that block with root block_root

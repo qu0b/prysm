@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/interfaces"
@@ -13,7 +14,6 @@ import (
 	ethpbv2 "github.com/prysmaticlabs/prysm/v5/proto/eth/v2"
 	"github.com/prysmaticlabs/prysm/v5/proto/migration"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 const (
@@ -77,7 +77,7 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 		return nil, fmt.Errorf("could not get sync aggregate %v", err)
 	}
 	assert.AlwaysGreaterThanOrEqualTo(syncAggregate.SyncCommitteeBits.Count(), params.BeaconConfig().MinSyncCommitteeParticipants, "Sync committee bits count should be >= MIN_SYNC_COMMITTEE_PARTICIPANTS", map[string]any{
-		"syncCommitteeBitsCount":        syncAggregate.SyncCommitteeBits.Count(),
+		"syncCommitteeBitsCount":       syncAggregate.SyncCommitteeBits.Count(),
 		"MinSyncCommitteeParticipants": params.BeaconConfig().MinSyncCommitteeParticipants,
 	})
 	if syncAggregate.SyncCommitteeBits.Count() < params.BeaconConfig().MinSyncCommitteeParticipants {
@@ -110,7 +110,7 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 	if err != nil {
 		return nil, fmt.Errorf("could not get block root %v", err)
 	}
-	assert.Always(bytes.Equal(headerRoot, blockRoot), "Header root should equal block root", map[string]any{
+	assert.Always(bytes.Equal(headerRoot[:], blockRoot[:]), "Header root should equal block root", map[string]any{
 		"headerRoot": headerRoot,
 		"blockRoot":  blockRoot,
 	})
@@ -142,7 +142,8 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 	if err != nil {
 		return nil, fmt.Errorf("could not get attested header root %v", err)
 	}
-	assert.Always(bytes.Equal(attestedHeaderRoot, block.Block().ParentRoot()), "Attested header root should equal block parent root", map[string]any{
+	parentRoot := block.Block().ParentRoot()
+	assert.Always(bytes.Equal(attestedHeaderRoot[:], parentRoot[:]), "Attested header root should equal block parent root", map[string]any{
 		"attestedHeaderRoot": attestedHeaderRoot,
 		"blockParentRoot":    block.Block().ParentRoot(),
 	})
@@ -205,7 +206,8 @@ func NewLightClientFinalityUpdateFromBeaconState(
 			if err != nil {
 				return nil, fmt.Errorf("could not get finalized header root %v", err)
 			}
-			assert.Always(bytes.Equal(finalizedHeaderRoot, bytesutil.ToBytes32(attestedState.FinalizedCheckpoint().Root)), "Finalized header root should equal attested finalized checkpoint root", map[string]any{
+			attestcpRoot := bytesutil.ToBytes32(attestedState.FinalizedCheckpoint().Root)
+			assert.Always(bytes.Equal(finalizedHeaderRoot[:], attestcpRoot[:]), "Finalized header root should equal attested finalized checkpoint root", map[string]any{
 				"finalizedHeaderRoot":             finalizedHeaderRoot,
 				"attestedFinalizedCheckpointRoot": attestedState.FinalizedCheckpoint().Root,
 			})

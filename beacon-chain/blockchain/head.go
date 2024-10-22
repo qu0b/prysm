@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/feed"
 	statefeed "github.com/prysmaticlabs/prysm/v5/beacon-chain/core/feed/state"
@@ -23,7 +24,6 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // UpdateAndSaveHeadWithBalances updates the beacon state head after getting justified balanced from cache.
@@ -172,7 +172,9 @@ func (s *Service) saveHead(ctx context.Context, newHeadRoot [32]byte, headBlock 
 	if err := s.setHead(newHead); err != nil {
 		return errors.Wrap(err, "could not set head")
 	}
-	assert.Always(bytes.Equal(s.headRoot()[:], newHeadRoot[:]), "Head root should be updated to new head root after setHead in saveHead", map[string]interface{}{
+
+	headRoot := s.headRoot()
+	assert.Always(bytes.Equal(headRoot[:], newHeadRoot[:]), "Head root should be updated to new head root after setHead in saveHead", map[string]interface{}{
 		"expectedHeadRoot": fmt.Sprintf("%#x", newHeadRoot),
 		"actualHeadRoot":   fmt.Sprintf("%#x", s.headRoot()),
 	})

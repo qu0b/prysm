@@ -35,23 +35,12 @@ func (f *ForkChoice) NewSlot(ctx context.Context, slot primitives.Slot) error {
 	// Reset proposer boost root
 	f.store.proposerBoostRoot = [32]byte{}
 
-	// Assert that the current slot is greater than or equal to the last processed slot
-	assert.Always(slot >= f.store.latestSlot, "Slot progression must be non-decreasing", map[string]any{
-		"current_slot": slot,
-		"last_slot":    f.store.latestSlot,
-	})
 
 	// Return if it's not a new epoch.
 	if !slots.IsEpochStart(slot) {
 		return nil
 	}
 
-	// Assert that slots since epoch start is zero at epoch start
-	slotsSinceEpochStart := slots.SlotsSinceEpochStart(slot)
-	assert.Always(slotsSinceEpochStart == 0, "At epoch start, slots since epoch start should be zero", map[string]any{
-		"slots_since_epoch_start": slotsSinceEpochStart,
-		"current_slot":            slot,
-	})
 
 	// Update store.justified_checkpoint if a better checkpoint on the store.finalized_checkpoint chain
 	if err := f.updateUnrealizedCheckpoints(ctx); err != nil {

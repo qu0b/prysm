@@ -4959,7 +4959,12 @@ def prysm_deps():
         sum = "h1:aJMhYGrd5QSmlpLMr2MftRKl7t8J8PTZPA732ud/XR8=",
         version = "v1.27.0",
     )
-
+    go_repository(
+        name = "com_github_antithesishq_antithesis_sdk_go",
+        importpath = "github.com/antithesishq/antithesis-sdk-go",
+        sum = "h1:LoIaSOJfaiwLt1WsZyJQEdaENewAR6G+F+aN8I6Sy7E=",
+        version = "v0.4.0",
+    )
     http_archive(
         name = "com_github_supranational_blst",
         urls = [

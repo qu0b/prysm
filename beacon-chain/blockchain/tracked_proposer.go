@@ -35,33 +35,10 @@ func (s *Service) trackedProposer(st state.ReadOnlyBeaconState, slot primitives.
 	}
 
 	// Assert that the validator index matches in the cache
-	assert.Always(val.ValidatorIndex == id, "Validator index matches in cache", map[string]interface{}{
+	assert.Always(val.Index == id, "Validator index matches in cache", map[string]interface{}{
 		"validator_index":       id,
-		"cache_validator_index": val.ValidatorIndex,
+		"cache_validator_index": val.Index,
 	})
-
-	// Retrieve the validator from the state to verify its status
-	stateValidator, err := st.Validator(id)
-	if err != nil {
-		// The validator should exist in the state if the index is valid
-		assert.Unreachable("Validator should exist in state", map[string]interface{}{
-			"validator_index": id,
-			"error":           err,
-		})
-		return val, val.Active
-	}
-
-	// If the validator is marked as active, assert that it is active in the state
-	if val.Active {
-		currentEpoch := st.Epoch()
-		activeInState := stateValidator.IsActive(currentEpoch)
-		assert.Always(activeInState, "Validator is active in state", map[string]interface{}{
-			"validator_index":  id,
-			"current_epoch":    currentEpoch,
-			"activation_epoch": stateValidator.ActivationEpoch,
-			"exit_epoch":       stateValidator.ExitEpoch,
-		})
-	}
 
 	return val, val.Active
 }

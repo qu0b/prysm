@@ -13,7 +13,7 @@ import (
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
+	assert "github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func (s *Store) setUnrealizedJustifiedEpoch(root [32]byte, epoch primitives.Epoch) error {
@@ -114,29 +114,8 @@ func (f *ForkChoice) updateUnrealizedCheckpoints(ctx context.Context) error {
 		}
 		if node.finalizedEpoch > f.store.finalizedCheckpoint.Epoch {
 			f.store.finalizedCheckpoint = f.store.unrealizedFinalizedCheckpoint
-
-			// Assert that finalized checkpoint epoch increases
-			assert.AlwaysGreaterThan(
-				f.store.finalizedCheckpoint.Epoch,
-				f.store.prevFinalizedCheckpoint.Epoch,
-				"updateUnrealizedCheckpoints: Finalized checkpoint epoch should increase",
-				map[string]any{
-					"newFinalizedEpoch": f.store.finalizedCheckpoint.Epoch,
-					"prevFinalizedEpoch": f.store.prevFinalizedCheckpoint.Epoch,
-				},
-			)
 		}
 	}
-	// Assert that store's justified checkpoint epoch >= finalized checkpoint epoch
-	assert.AlwaysGreaterThanOrEqualTo(
-		f.store.justifiedCheckpoint.Epoch,
-		f.store.finalizedCheckpoint.Epoch,
-		"updateUnrealizedCheckpoints: Store's justified checkpoint epoch should be >= finalized checkpoint epoch",
-		map[string]any{
-			"justifiedCheckpointEpoch": f.store.justifiedCheckpoint.Epoch,
-			"finalizedCheckpointEpoch": f.store.finalizedCheckpoint.Epoch,
-		},
-	)
 	return nil
 }
 

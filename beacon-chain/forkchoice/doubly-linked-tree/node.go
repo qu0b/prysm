@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	forkchoice2 "github.com/prysmaticlabs/prysm/v5/consensus-types/forkchoice"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // ProcessAttestationsThreshold  is the number of seconds after which we
@@ -142,7 +142,6 @@ func (n *Node) arrivedEarly(genesisTime uint64) (bool, error) {
 	secs, err := slots.SecondsSinceSlotStart(n.slot, genesisTime, n.timestamp)
 	// Add assertion that error is nil and secs is non-negative
 	assert.Always(err == nil, "Error calculating seconds since slot start in arrivedEarly", map[string]any{"nodeRoot": n.root, "slot": n.slot, "timestamp": n.timestamp, "error": err})
-	assert.Always(secs >= 0, "Seconds since slot start should not be negative in arrivedEarly", map[string]any{"nodeRoot": n.root, "slot": n.slot, "timestamp": n.timestamp, "secs": secs})
 	votingWindow := params.BeaconConfig().SecondsPerSlot / params.BeaconConfig().IntervalsPerSlot
 	return secs < votingWindow, err
 }
@@ -156,7 +155,6 @@ func (n *Node) arrivedAfterOrphanCheck(genesisTime uint64) (bool, error) {
 	secs, err := slots.SecondsSinceSlotStart(n.slot, genesisTime, n.timestamp)
 	// Add assertion that error is nil and secs is non-negative
 	assert.Always(err == nil, "Error calculating seconds since slot start in arrivedAfterOrphanCheck", map[string]any{"nodeRoot": n.root, "slot": n.slot, "timestamp": n.timestamp, "error": err})
-	assert.Always(secs >= 0, "Seconds since slot start should not be negative in arrivedAfterOrphanCheck", map[string]any{"nodeRoot": n.root, "slot": n.slot, "timestamp": n.timestamp, "secs": secs})
 	return secs >= ProcessAttestationsThreshold, err
 }
 

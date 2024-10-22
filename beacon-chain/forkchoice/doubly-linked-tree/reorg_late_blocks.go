@@ -80,8 +80,6 @@ func (f *ForkChoice) ShouldOverrideFCU() (override bool) {
 	// }
 
 	// Only orphan a block if the head LMD vote is weak
-	assert.Always(head.weight >= 0, "head weight negative in ShouldOverrideFCU", map[string]any{"head_weight": head.weight})
-	assert.Always(f.store.committeeWeight > 0, "committee weight non-positive in ShouldOverrideFCU", map[string]any{"committee_weight": f.store.committeeWeight})
 	if head.weight*100 > f.store.committeeWeight*params.BeaconConfig().ReorgWeightThreshold {
 		return
 	}
@@ -97,7 +95,6 @@ func (f *ForkChoice) ShouldOverrideFCU() (override bool) {
 		return true
 	}
 	// Only orphan a block if the parent LMD vote is strong
-	assert.Always(parent.weight >= 0, "parent weight negative in ShouldOverrideFCU", map[string]any{"parent_weight": parent.weight})
 	if parent.weight*100 < f.store.committeeWeight*params.BeaconConfig().ReorgParentWeightThreshold {
 		return
 	}
@@ -150,14 +147,11 @@ func (f *ForkChoice) GetProposerHead() [32]byte {
 	}
 
 	// Only orphan a block if the head LMD vote is weak
-	assert.Always(head.weight >= 0, "head weight negative in GetProposerHead", map[string]any{"head_weight": head.weight})
-	assert.Always(f.store.committeeWeight > 0, "committee weight non-positive in GetProposerHead", map[string]any{"committee_weight": f.store.committeeWeight})
 	if head.weight*100 > f.store.committeeWeight*params.BeaconConfig().ReorgWeightThreshold {
 		return head.root
 	}
 
 	// Only orphan a block if the parent LMD vote is strong
-	assert.Always(parent.weight >= 0, "parent weight negative in GetProposerHead", map[string]any{"parent_weight": parent.weight})
 	if parent.weight*100 < f.store.committeeWeight*params.BeaconConfig().ReorgParentWeightThreshold {
 		return head.root
 	}

@@ -1,4 +1,4 @@
-FROM debian:stable-slim AS etb-client-builder
+FROM golang:1.23.2-bookworm AS builder
 
 # build deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -8,12 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     software-properties-common \
     apt-transport-https \
-    openjdk-17-jdk \
     ca-certificates \
     wget \
     tzdata \
     bash \
-    python3-dev \
     make \
     g++ \
     gnupg \
@@ -24,43 +22,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gradle \
     pkg-config \
     libssl-dev \
-    git \
-    git-lfs \
-    librocksdb7.8 \
     libclang-dev
 
-# set up go (geth+prysm)
-RUN arch=$(arch | sed s/aarch64/arm64/ | sed s/x86_64/amd64/) && \
-    wget https://go.dev/dl/go1.21.5.linux-${arch}.tar.gz
-
-# setup nodejs (lodestar)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
 apt-get install -y nodejs
 
-RUN npm install -g @bazel/bazelisk # prysm build system
+RUN npm install -g @bazel/bazelisk
 
+ENV CGO_ENABLED=1
 
-FROM etb-client-builder AS prysm-builder
-ARG PRYSM_BRANCH
-ARG PRYSM_REPO
-RUN git clone "${PRYSM_REPO}"; \
-    cd prysm && git checkout "${PRYSM_BRANCH}"; \
-    git log -n 1 --format=format:"%H" > /prysm.version
+RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
 
-FROM prysm-builder AS prysm
-RUN cd prysm && \
-    bazelisk build --config=release //cmd/beacon-chain:beacon-chain //cmd/validator:validator
+COPY ./ /prysm
 
-FROM prysm-builder AS prysm-race
-RUN cd prysm && \
-    bazelisk build --config=release --@io_bazel_rules_go//go/config:race //cmd/beacon-chain:beacon-chain //cmd/validator:validator
+WORKDIR /prysm
 
+# RUN go mod tidy
+
+# RUN antithesis-go-instrumentor -assert_only -catalog_dir=./cmd/beacon-chain ./ 
+
+RUN bazelisk build --config=release //cmd/beacon-chain:beacon-chain
 
 FROM debian:stable-slim
 
-COPY --from=prysm-builder /git/prysm/bazel-bin/cmd/beacon-chain/beacon-chain_/beacon-chain /usr/local/bin/beacon-chain
+COPY --from=builder /prysm/bazel-bin/cmd/beacon-chain/beacon-chain_/beacon-chain /usr/local/bin/beacon-chain
 
-COPY --from=prysm-builder /git/prysm/bazel-bin/cmd/validator/validator_/validator /usr/local/bin/validator
-
+ENTRYPOINT /usr/local/bin/beacon-chain
 
 # https://github.com/ethpandaops/eth-client-docker-image-builder/blob/master/prysm/Dockerfile.beacon
