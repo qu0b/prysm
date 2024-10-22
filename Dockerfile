@@ -37,9 +37,9 @@ COPY ./ /prysm
 
 WORKDIR /prysm
 
-# RUN go mod tidy
+RUN go mod tidy
 
-# RUN antithesis-go-instrumentor -assert_only -catalog_dir=./cmd/beacon-chain ./ 
+RUN antithesis-go-instrumentor -assert_only -catalog_dir=./cmd/beacon-chain ./ 
 
 RUN bazelisk build --config=release //cmd/beacon-chain:beacon-chain
 
