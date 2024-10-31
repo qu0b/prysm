@@ -41,12 +41,13 @@ RUN go mod tidy
 
 RUN antithesis-go-instrumentor -assert_only -catalog_dir=./cmd/beacon-chain ./ 
 
-RUN bazelisk build --config=release //cmd/beacon-chain:beacon-chain
+RUN bazelisk build --config=minimal //cmd/beacon-chain:beacon-chain
 
 FROM debian:stable-slim
 
 COPY --from=builder /prysm/bazel-bin/cmd/beacon-chain/beacon-chain_/beacon-chain /usr/local/bin/beacon-chain
 
-ENTRYPOINT /usr/local/bin/beacon-chain
+ENTRYPOINT ["/bin/bash", "-c", "exec /usr/local/bin/beacon-chain \"$@\"", "--"]
+
 
 # https://github.com/ethpandaops/eth-client-docker-image-builder/blob/master/prysm/Dockerfile.beacon
