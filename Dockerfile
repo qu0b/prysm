@@ -41,7 +41,7 @@ RUN go mod tidy
 
 RUN antithesis-go-instrumentor -assert_only -catalog_dir=./cmd/beacon-chain ./ 
 
-RUN bazelisk build --config=minimal //cmd/beacon-chain:beacon-chain
+RUN bazelisk build --config=minimal --@io_bazel_rules_go//go/config:race //cmd/beacon-chain:beacon-chain
 
 FROM debian:stable-slim
 
