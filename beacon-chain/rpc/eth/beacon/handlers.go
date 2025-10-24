@@ -80,7 +80,9 @@ func versionHeaderFromRequest(body []byte) (string, error) {
 		return "", errors.Wrap(err, "unable to peek slot from block")
 	}
 	ce := slots.ToEpoch(sp.Block.Slot)
-	if ce >= params.BeaconConfig().FuluForkEpoch {
+	if ce >= params.BeaconConfig().GloasForkEpoch {
+		return version.String(version.Gloas), nil
+	} else if ce >= params.BeaconConfig().FuluForkEpoch {
 		return version.String(version.Fulu), nil
 	} else if ce >= params.BeaconConfig().ElectraForkEpoch {
 		return version.String(version.Electra), nil
