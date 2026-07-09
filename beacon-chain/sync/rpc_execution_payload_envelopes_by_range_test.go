@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 
 	chainMock "github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain/testing"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
 	testDB "github.com/OffchainLabs/prysm/v7/beacon-chain/db/testing"
 	mockExecution "github.com/OffchainLabs/prysm/v7/beacon-chain/execution/testing"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
@@ -154,6 +155,52 @@ func TestValidateExecutionPayloadEnvelopeByRangeResponseRejectsMalformedEnvelope
 		require.NotNil(t, err)
 		assert.ErrorContains(t, "invalid execution payload envelope", err)
 	})
+}
+
+func TestWeakSubjectivityCheckpointSlot(t *testing.T) {
+	helpers.ClearCache()
+	t.Cleanup(helpers.ClearCache)
+
+	headState, err := util.NewBeaconState()
+	require.NoError(t, err)
+	validators := make([]*pb.Validator, 128)
+	balances := make([]uint64, len(validators))
+	for i := range validators {
+		validators[i] = &pb.Validator{
+			PublicKey:             make([]byte, params.BeaconConfig().BLSPubkeyLength),
+			WithdrawalCredentials: make([]byte, 32),
+			EffectiveBalance:      params.BeaconConfig().MaxEffectiveBalance,
+			ExitEpoch:             params.BeaconConfig().FarFutureEpoch,
+		}
+		balances[i] = validators[i].EffectiveBalance
+	}
+	require.NoError(t, headState.SetValidators(validators))
+	require.NoError(t, headState.SetBalances(balances))
+	require.NoError(t, headState.SetFinalizedCheckpoint(&pb.Checkpoint{Epoch: 600, Root: make([]byte, 32)}))
+
+	wsEpoch, err := helpers.LatestWeakSubjectivityEpoch(t.Context(), headState, params.BeaconConfig())
+	require.NoError(t, err)
+	wsStartSlot := util.SlotAtEpoch(t, wsEpoch)
+	require.NotEqual(t, primitives.Slot(0), wsStartSlot)
+
+	svc := &Service{cfg: &config{chain: &chainMock.ChainService{State: headState}}}
+	tests := []struct {
+		name string
+		slot primitives.Slot
+		want bool
+	}{
+		{name: "slot before checkpoint", slot: wsStartSlot - 1, want: true},
+		{name: "slot at checkpoint", slot: wsStartSlot, want: false},
+		{name: "slot after checkpoint", slot: wsStartSlot + 1, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checkpointSlot, err := svc.weakSubjectivityCheckpointSlot(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, wsStartSlot, checkpointSlot)
+			assert.Equal(t, tt.want, tt.slot < checkpointSlot)
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------

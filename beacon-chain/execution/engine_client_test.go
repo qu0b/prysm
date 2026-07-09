@@ -3137,6 +3137,102 @@ func TestGloasPayloadFromExecutionBlock_PropagatesBlockAccessList(t *testing.T) 
 	require.DeepEqual(t, bal, payload.BlockAccessList)
 }
 
+type gloasReconstructionRPCClient struct {
+	bodies []*pb.ExecutionPayloadBodyV2
+}
+
+func (*gloasReconstructionRPCClient) Close() {}
+
+func (*gloasReconstructionRPCClient) BatchCall(elems []rpc.BatchElem) error {
+	for i := range elems {
+		hash, ok := elems[i].Args[0].(common.Hash)
+		if !ok {
+			return errors.New("expected block hash argument")
+		}
+		result, ok := elems[i].Result.(*pb.ExecutionBlock)
+		if !ok {
+			return errors.New("expected execution block result")
+		}
+		blobGasUsed := uint64(1)
+		excessBlobGas := uint64(2)
+		slotNumber := uint64(3)
+		*result = pb.ExecutionBlock{
+			Hash: hash,
+			Header: gethtypes.Header{
+				Number:        big.NewInt(1),
+				BaseFee:       big.NewInt(1),
+				BlobGasUsed:   &blobGasUsed,
+				ExcessBlobGas: &excessBlobGas,
+				SlotNumber:    &slotNumber,
+			},
+		}
+	}
+	return nil
+}
+
+func (c *gloasReconstructionRPCClient) CallContext(_ context.Context, result any, method string, _ ...any) error {
+	if method != GetPayloadBodiesByHashV2 {
+		return errors.Errorf("unexpected RPC method %s", method)
+	}
+	bodies, ok := result.(*[]*pb.ExecutionPayloadBodyV2)
+	if !ok {
+		return errors.New("expected payload bodies V2 result")
+	}
+	*bodies = c.bodies
+	return nil
+}
+
+func TestReconstructFullGloasExecutionPayloadsByHash_BlockAccessList(t *testing.T) {
+	hash := common.BytesToHash([]byte("block-hash"))
+	emptyBytes := hexutil.Bytes{}
+	emptyList := hexutil.Bytes{0xc0}
+	nonEmptyList := hexutil.Bytes{0xc1, 0x80}
+
+	tests := []struct {
+		name    string
+		body    *pb.ExecutionPayloadBodyV2
+		wantBAL []byte
+	}{
+		{
+			name: "nil payload body",
+		},
+		{
+			name: "missing block access list",
+			body: &pb.ExecutionPayloadBodyV2{},
+		},
+		{
+			name: "zero length block access list",
+			body: &pb.ExecutionPayloadBodyV2{BlockAccessList: &emptyBytes},
+		},
+		{
+			name:    "RLP empty list",
+			body:    &pb.ExecutionPayloadBodyV2{BlockAccessList: &emptyList},
+			wantBAL: emptyList,
+		},
+		{
+			name:    "RLP non-empty list",
+			body:    &pb.ExecutionPayloadBodyV2{BlockAccessList: &nonEmptyList},
+			wantBAL: nonEmptyList,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &Service{rpcClient: &gloasReconstructionRPCClient{bodies: []*pb.ExecutionPayloadBodyV2{tt.body}}}
+			payloads, err := service.ReconstructFullGloasExecutionPayloadsByHash(t.Context(), [][32]byte{hash})
+			require.NoError(t, err)
+			payload, ok := payloads[hash]
+			if tt.wantBAL == nil {
+				require.Equal(t, false, ok)
+				return
+			}
+
+			require.Equal(t, true, ok)
+			require.DeepEqual(t, tt.wantBAL, payload.BlockAccessList)
+		})
+	}
+}
+
 func TestExecutionBlock_MarshalUnmarshalJSON_BlockAccessList(t *testing.T) {
 	bal := hexutil.Bytes{0xde, 0xad, 0xbe, 0xef}
 	original := &pb.ExecutionBlock{

@@ -805,6 +805,9 @@ func (s *Service) ReconstructFullGloasExecutionPayloadsByHash(
 	if len(bodiesV2) != len(requestHashes) {
 		return nil, errors.Errorf("payload bodies V2 count mismatch: got %d, want %d", len(bodiesV2), len(requestHashes))
 	}
+	if len(execBlocks) != len(requestHashes) {
+		return nil, errors.Errorf("execution blocks count mismatch: got %d, want %d", len(execBlocks), len(requestHashes))
+	}
 
 	for i, h := range requestHashes {
 		blk := execBlocks[i]
@@ -812,13 +815,15 @@ func (s *Service) ReconstructFullGloasExecutionPayloadsByHash(
 		if err != nil {
 			return nil, err
 		}
-		if bodiesV2[i] != nil {
-			payload.Transactions = pb.RecastHexutilByteSlice(bodiesV2[i].Transactions)
-			payload.Withdrawals = bodiesV2[i].Withdrawals
-			if bodiesV2[i].BlockAccessList != nil {
-				payload.BlockAccessList = *bodiesV2[i].BlockAccessList
-			}
+		body := bodiesV2[i]
+		if body == nil || body.BlockAccessList == nil || len(*body.BlockAccessList) == 0 {
+			// Historical BALs may be pruned. A missing map entry lets callers report
+			// the payload as unavailable without serving an invalid zero-length BAL.
+			continue
 		}
+		payload.Transactions = pb.RecastHexutilByteSlice(body.Transactions)
+		payload.Withdrawals = body.Withdrawals
+		payload.BlockAccessList = *body.BlockAccessList
 		payloads[h] = payload
 	}
 

@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
 	p2ptypes "github.com/OffchainLabs/prysm/v7/beacon-chain/p2p/types"
 	"github.com/OffchainLabs/prysm/v7/config/params"
@@ -171,9 +172,26 @@ func (s *Service) streamCanonicalEnvelopes(ctx context.Context, rp rangeParams, 
 		return errors.Wrap(err, "could not batch reconstruct full execution payload envelopes")
 	}
 
+	var wsCheckpointSlot primitives.Slot
+	var wsCheckpointComputed bool
 	for _, c := range collected {
 		payload := payloadByHash[c.blockHash]
 		if payload == nil {
+			if !wsCheckpointComputed {
+				wsCheckpointSlot, err = s.weakSubjectivityCheckpointSlot(ctx)
+				if err != nil {
+					s.writeErrorResponseToStream(responseCodeServerError, p2ptypes.ErrGeneric.Error(), stream)
+					return errors.Wrap(err, "could not determine weak subjectivity checkpoint")
+				}
+				wsCheckpointComputed = true
+			}
+			if c.env.Message.Slot < wsCheckpointSlot {
+				log.WithFields(logrus.Fields{
+					"blockHash": bytesutil.Trunc(c.blockHash[:]),
+					"slot":      c.env.Message.Slot,
+				}).Debug("Omitting unavailable execution payload envelope before weak subjectivity checkpoint")
+				continue
+			}
 			s.writeErrorResponseToStream(responseCodeServerError, p2ptypes.ErrGeneric.Error(), stream)
 			return errors.Errorf("missing reconstructed payload for block hash %#x", c.blockHash)
 		}
@@ -202,6 +220,25 @@ func (s *Service) streamCanonicalEnvelopes(ctx context.Context, rp rangeParams, 
 		}
 	}
 	return nil
+}
+
+func (s *Service) weakSubjectivityCheckpointSlot(ctx context.Context) (primitives.Slot, error) {
+	headState, err := s.cfg.chain.HeadStateReadOnly(ctx)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not get head state")
+	}
+	if headState == nil || headState.IsNil() {
+		return 0, errors.New("head state is nil")
+	}
+	wsEpoch, err := helpers.LatestWeakSubjectivityEpoch(ctx, headState, params.BeaconConfig())
+	if err != nil {
+		return 0, errors.Wrap(err, "could not compute latest weak subjectivity epoch")
+	}
+	wsStartSlot, err := slots.EpochStart(wsEpoch)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not compute weak subjectivity checkpoint slot")
+	}
+	return wsStartSlot, nil
 }
 
 // validateEnvelopesByRange validates the ExecutionPayloadEnvelopesByRange request and returns
